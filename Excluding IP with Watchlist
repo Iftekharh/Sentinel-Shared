@@ -1,0 +1,11 @@
+//Watchlist alias is Subnets
+// Column name within the watchlist is 'Subnet' contains the Zscaler Subnets
+let ZscalerIP = _GetWatchlist('Subnets');
+let lookup = toscalar( ZscalerIP |  summarize list_CIDR=make_set(subnet) );
+SigninLogs
+//| where TimeGenerated > ago(1h)
+//| summarize by IPAddress
+| mv-apply list_CIDR=lookup to typeof(string) on
+(
+    where not(ipv4_is_match(IPAddress, list_CIDR)) 
+)

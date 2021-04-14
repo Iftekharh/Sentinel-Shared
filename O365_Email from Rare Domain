@@ -1,0 +1,12 @@
+//needs a fumction of VIPlist with Watchlist
+//eDiscovery logs needs to be ingested using O365 Management API
+O365ManagementAPI_CL
+| where TimeGenerated >= ago(90d)
+| where RecordType_d == "28"
+|  extend SenderDomain = tostring(split(P2Sender_s, "@")[1]) 
+| summarize FirstEmailRecieved = min(MessageTime_t), LastEmailRecieved = max(MessageTime_t), TotalEmails = dcount(Subject_s) by SenderDomain
+| extend Age = (LastEmailRecieved - FirstEmailRecieved)/1d
+| extend RareDomain = Age < 1
+| where RareDomain == "true"
+| project SenderDomain, TotalEmails, FirstEmailRecieved, LastEmailRecieved
+| sort  by TotalEmails desc

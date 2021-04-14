@@ -1,0 +1,8 @@
+//needs a fumction of VIPlist with Watchlist
+//eDiscovery logs needs to be ingested using O365 Management API
+O365ManagementLogs_CL
+| where RecordType_d == "24"
+| where Operation_s contains "SearchStarted"
+| where Query_s in~ (VIPList )
+| project TimeGenerated, UserId_s, ObjectType_s, Case_s, Query_s
+| extend AccountCustomEntity = UserId_s

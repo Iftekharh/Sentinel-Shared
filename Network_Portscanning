@@ -1,0 +1,12 @@
+//Port Scanning with Meta parser
+let timeframe = ago(1h);
+let threshold = 50;
+Network_0_1_MetaParser
+| where TimeGenerated >= timeframe
+| where not(ipv4_is_match("10.0.0.0",src_ip_addr,8)
+or ipv4_is_match("172.16.0.0",src_ip_addr,12)
+or ipv4_is_match("192.168.0.0",src_ip_addr,16))
+| summarize dcount(dst_port) 
+by src_ip_addr, bin(TimeGenerated, 5m)
+| where dcount_dst_port > threshold
+| extend timestamp = TimeGenerated, IPCustomEntity = src_ip_addr

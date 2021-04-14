@@ -1,0 +1,46 @@
+let geoData = externaldata(network:string,geoname_id:string,continent_code:string,continent_name:string,country_iso_code:string,country_name:string,is_anonymous_proxy:string,is_satellite_provider:string)
+[@"https://raw.githubusercontent.com/datasets/geoip2-ipv4/master/data/geoip2-ipv4.csv"] with (ignoreFirstRecord=true, format="csv");
+let lookup = toscalar( geoData |  summarize list_CIDR=make_set(network) );
+AzureActivity
+// get a small time range (this REALLY helps perf!!!!)
+| where TimeGenerated > ago(12h)
+| summarize by CallerIpAddress
+| mv-apply list_CIDR=lookup to typeof(string) on
+(
+    // Match each IP from 'CallerIpAddress' with the remote 'network' column 
+    where ipv4_is_match (CallerIpAddress, list_CIDR) //== false
+)
+// summarize to remove any duplicates
+//| summarize by CallerIpAddress, list_CIDR
+| join kind=inner 
+  (
+  // join to remote data again, to add enrichments 
+  geoData
+  ) on $left.list_CIDR == $right.network
+// build final display 
+| summarize by CallerIpAddress, network, country_name, country_iso_code  
+
+
+
+//GeoIP Lookup for Syslog events
+let geoData = externaldata(network:string,geoname_id:string,continent_code:string,continent_name:string,country_iso_code:string,country_name:string,is_anonymous_proxy:string,is_satellite_provider:string)
+[@"https://raw.githubusercontent.com/datasets/geoip2-ipv4/master/data/geoip2-ipv4.csv"] with (ignoreFirstRecord=true, format="csv");
+let lookup = toscalar( geoData |  summarize list_CIDR=make_set(network) );
+Syslog
+| where SyslogMessage contains "accepted" and SyslogMessage contains "password"
+| extend ClientIP = extract("(([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})\\.(([0-9]{1,3})))",1,SyslogMessage) 
+| extend InternalIP = ipv4_is_private( ClientIP)
+| where InternalIP == "false"
+| evaluate ipv4_lookup (geoData, ClientIP, network, false)
+
+
+//GeoIP Lookup for SecurityEvents
+let geoData = externaldata
+(network:string,geoname_id:string,continent_code:string,continent_name:string,
+country_iso_code:string,country_name:string,is_anonymous_proxy:string,is_satellite_provider:string)
+[@"https://raw.githubusercontent.com/datasets/geoip2-ipv4/master/data/geoip2-ipv4.csv"] with (ignoreFirstRecord=true, format="csv");
+SecurityEvent
+| evaluate ipv4_lookup (geoData, IpAddress,  network, false)
+
+
+

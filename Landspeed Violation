@@ -1,0 +1,25 @@
+//Landspeed Violation Attack - Azure AD
+SigninLogs
+//| where TimeGenerated > ago(14d)
+| where ResultType == "0"
+| where isnotempty(Location)
+| sort by UserPrincipalName asc , TimeGenerated desc
+| extend GC=parse_json(LocationDetails.geoCoordinates)
+| extend Longitude = GC.longitude
+| extend Latitude = GC.latitude
+| sort by TimeGenerated desc
+| extend PreviousLocation = next(Location, 1)
+| extend PreviousLongitude = next(Longitude, 1)
+| extend PreviousLatitude = next(Latitude, 1)
+| extend PreviousIPAddress = next(IPAddress, 1)
+| extend PreviousTime = next(TimeGenerated, 1)
+| extend PreviousUserPrincipalName = next(UserPrincipalName, 1)
+| where tostring(PreviousLatitude) != tostring(Latitude) and tostring(PreviousLongitude) != tostring(Longitude)
+| extend DistanceInKM = toint(geo_distance_2points(toint(PreviousLongitude), toint(PreviousLatitude), toint(Longitude), toint(Latitude))/1000)
+| extend TravelTime = (TimeGenerated - PreviousTime)/1h
+| where UserPrincipalName == PreviousUserPrincipalName
+| extend KMH = (DistanceInKM/TravelTime) 
+| extend PreviousUserPrincipalName = next(UserPrincipalName, 1)
+| where UserPrincipalName == PreviousUserPrincipalName
+| where KMH >= 1000
+| project UserPrincipalName, TimeGenerated, PreviousTime, KMH, DistanceInKM, Location, PreviousLocation, IPAddress, PreviousIPAddress, PreviousUserPrincipalName, Latitude, Longitude, PreviousLatitude, PreviousLongitude
