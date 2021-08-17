@@ -1,0 +1,169 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Until": {
+                "actions": {
+                    "Compose": {
+                        "inputs": "@body('Run_query_and_list_results_2')?['value']",
+                        "runAfter": {
+                            "Run_query_and_list_results_2": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Compose"
+                    },
+                    "Create_CSV_table": {
+                        "inputs": {
+                            "format": "CSV",
+                            "from": "@outputs('Compose')"
+                        },
+                        "runAfter": {
+                            "Compose": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Table"
+                    },
+                    "Create_blob_(V2)": {
+                        "inputs": {
+                            "body": "@body('Create_CSV_table')",
+                            "headers": {
+                                "ReadFileMetadataFromServer": true
+                            },
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azureblob']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('tzdvmsdiag'))}/files",
+                            "queries": {
+                                "folderPath": "/somefiles",
+                                "name": "@{parameters('initialTime')}-batch(@{variables('batchNumber')}).csv",
+                                "queryParametersSingleEncoded": true
+                            }
+                        },
+                        "runAfter": {
+                            "Create_CSV_table": [
+                                "Succeeded"
+                            ]
+                        },
+                        "runtimeConfiguration": {
+                            "contentTransfer": {
+                                "transferMode": "Chunked"
+                            }
+                        },
+                        "type": "ApiConnection"
+                    },
+                    "Increment_variable": {
+                        "inputs": {
+                            "name": "batchNumber",
+                            "value": 1
+                        },
+                        "runAfter": {
+                            "Create_blob_(V2)": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "IncrementVariable"
+                    },
+                    "Run_query_and_list_results_2": {
+                        "inputs": {
+                            "body": "let initialTime = datetime(@{parameters('initialTime')}); \nlet endTime = datetime(@{parameters('endTime')}); \nlet batchSize = @{parameters('batchSize')}; //Set once. The size of batch to be exported for each operation\nlet startingRow = (@{variables('batchNumber')}-1)*batchSize;\nlet endingRow = @{variables('batchNumber')}*batchSize-1;\nSecurityEvent\n| where TimeGenerated between(initialTime .. endTime) // Keep this time finter in any query\n| order by TimeGenerated asc\n| extend rn = row_number()\n| where rn between (startingRow .. endingRow)\n| project TimeGenerated, Computer, Activity, AccountType, EventID",
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "path": "/queryData",
+                            "queries": {
+                                "resourcegroups": "SOC",
+                                "resourcename": "CyberSecuritySOC",
+                                "resourcetype": "Log Analytics Workspace",
+                                "subscriptions": "d1d8779d-38d7-4f06-91db-9cbc8de0176f",
+                                "timerange": "Set in query"
+                            }
+                        },
+                        "runAfter": {},
+                        "type": "ApiConnection"
+                    }
+                },
+                "expression": "@greater(variables('batchNumber'), parameters('batchRuns'))",
+                "limit": {
+                    "count": 60,
+                    "timeout": "PT1H"
+                },
+                "runAfter": {
+                    "batchNumber": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Until"
+            },
+            "batchNumber": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "batchNumber",
+                            "type": "integer",
+                            "value": 1
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            },
+            "batchRuns": {
+                "defaultValue": 12,
+                "type": "Int"
+            },
+            "batchSize": {
+                "defaultValue": 400000,
+                "type": "Int"
+            },
+            "endTime": {
+                "defaultValue": "2021-08-02T23:59:59.999",
+                "type": "String"
+            },
+            "initialTime": {
+                "defaultValue": "2021-08-01T00:00",
+                "type": "String"
+            }
+        },
+        "triggers": {
+            "manual": {
+                "inputs": {
+                    "schema": {}
+                },
+                "kind": "Http",
+                "type": "Request"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "azureblob": {
+                    "connectionId": "/subscriptions/c539abe7-46de-4ff7-931d-3f36f1a1eee7/resourceGroups/THDSecOps/providers/Microsoft.Web/connections/azureblob",
+                    "connectionName": "azureblob",
+                    "id": "/subscriptions/c539abe7-46de-4ff7-931d-3f36f1a1eee7/providers/Microsoft.Web/locations/centralus/managedApis/azureblob"
+                },
+                "azuremonitorlogs": {
+                    "connectionId": "/subscriptions/c539abe7-46de-4ff7-931d-3f36f1a1eee7/resourceGroups/THDSecOps/providers/Microsoft.Web/connections/azuremonitorlogs-2",
+                    "connectionName": "azuremonitorlogs-2",
+                    "id": "/subscriptions/c539abe7-46de-4ff7-931d-3f36f1a1eee7/providers/Microsoft.Web/locations/centralus/managedApis/azuremonitorlogs"
+                }
+            }
+        }
+    }
+}
